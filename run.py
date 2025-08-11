@@ -31,7 +31,7 @@ def create_app():
 
     app.config.from_object(Config)
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=365)
-    app.config["SESSION_COOKIE_DOMAIN"]     = ".premise.site/"
+    app.config["SESSION_COOKIE_DOMAIN"]     = ".premise.site"
     SESSION_COOKIE_SECURE=False,  # HTTPS면 True
     app.config["SESSION_COOKIE_HTTPONLY"]   = True
     
