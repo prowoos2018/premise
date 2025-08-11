@@ -1,0 +1,32 @@
+<!-- templates/index.html -->
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>관리자 대시보드</title>
+  <style>
+    .btn {
+      display: inline-block;
+      padding: .5em 1em;
+      margin: .5em;
+      background: #28a745;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    .btn.logout {
+      background: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <h1>관리자 대시보드</h1>
+  <nav>
+    <a href="{{ url_for('orders.orders') }}" class="btn">주문 목록</a>
+    <a href="{{ url_for('alerts.send_invite') }}" class="btn">알림톡 발송</a>
+      <a href="{{ url_for('automation.start_review') }}" class="btn">리뷰시작</a>
+    <a href="{{ url_for('auth.logout') }}" class="btn logout">로그아웃</a>
+  </nav>
+</body>
+</html>
