@@ -33,18 +33,18 @@ def refresh_token():
 @auth_bp.route("/")
 def index():
     token = session.get("access_token")
+    current_app.logger.debug("[INDEX] session keys=%s", list(session.keys()))
     if not token:
-        current_app.logger.debug("Index: 토큰 없음 → login.html 렌더링")
+        current_app.logger.debug("[INDEX] access_token missing → rendering login.html")
         return render_template("login.html")
+    current_app.logger.debug("[INDEX] access_token present → rendering index.html")
     return render_template("index.html")
+
 
 
 @auth_bp.route("/login")
 def login():
-    """
-    Imweb OAuth 인가 페이지로 리다이렉트
-    """
-    scope = "order:read site-info:write"
+    scope = "order:read site-info:write"  # 필요 스코프만
     authorize_url = (
         "https://openapi.imweb.me/oauth2/authorize"
         f"?responseType=code"
@@ -53,83 +53,83 @@ def login():
         f"&siteCode={Config.IMWEB_SITE_CODE}"
         f"&scope={quote_plus(scope)}"
     )
+    current_app.logger.debug("[LOGIN] authorize_url=%s", authorize_url)
     return redirect(authorize_url)
 
 
 @auth_bp.route("/callback")
 def callback():
-    """
-    Imweb이 보내준 code를 받아 세션에 저장 후 토큰 교환 및 .env에 tokens 저장
-    """
-    # 1) OAuth 에러 처리
+    # 1) 에러 콜백 체크
     err = request.args.get("errorCode")
     if err:
         msg = request.args.get("message", "")
-        current_app.logger.error(f"OAuth 에러: {err} / {msg}")
+        current_app.logger.error("[CALLBACK] OAuth error: %s / %s", err, msg)
         return f"로그인 실패: {msg}", 400
 
-    # 2) 인가 코드 획득
+    # 2) code 수신
     code = request.args.get("code")
+    current_app.logger.debug("[CALLBACK] received params: %s", request.args.to_dict())
     if not code:
-        current_app.logger.error("callback 호출 시 code 파라미터 누락")
+        current_app.logger.error("[CALLBACK] code param missing")
         return "인가 코드가 없습니다.", 400
 
-    # 3) 세션에 authorization code 저장
     session["authorization_code"] = code
-    current_app.logger.debug(f"authorization_code 저장: {code}")
+    current_app.logger.debug("[CALLBACK] authorization_code saved in session")
 
-    # 4) 토큰 교환 요청
+    # 3) redirectUri 일치 검사 (오타/스킴 차이 탐지)
+    sent_redirect = Config.IMWEB_REDIRECT_URI
+    came_from = request.base_url  # /callback 자기 자신
+    current_app.logger.debug("[CALLBACK] Config.REDIRECT_URI=%s / request.base_url=%s", sent_redirect, came_from)
+
+    # 4) 토큰 교환
     token_url = "https://openapi.imweb.me/oauth2/token"
     data = {
         "grantType":    "authorization_code",
         "clientId":     Config.IMWEB_CLIENT_ID,
         "clientSecret": Config.IMWEB_CLIENT_SECRET,
-        "redirectUri":  Config.IMWEB_REDIRECT_URI,
+        "redirectUri":  sent_redirect,
         "code":         code,
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    current_app.logger.debug("TOKEN REQUEST DATA: %s", data)
-    current_app.logger.debug("TOKEN REQUEST HEADERS: %s", headers)
-
+    current_app.logger.debug("[CALLBACK] TOKEN req data=%s", data)
     try:
         resp = requests.post(token_url, data=data, headers=headers, timeout=10)
-        current_app.logger.debug("TOKEN RESPONSE STATUS: %s, BODY: %s", resp.status_code, resp.text)
+        current_app.logger.debug("[CALLBACK] TOKEN resp=%s %s", resp.status_code, resp.text)
         resp.raise_for_status()
         payload = resp.json()
     except Exception:
-        current_app.logger.exception("토큰 요청 중 예외 발생")
+        current_app.logger.exception("[CALLBACK] token request failed")
         return "토큰 요청 실패", 500
 
-    # 5) 응답 처리
     if payload.get("statusCode") != 200:
-        current_app.logger.error("토큰 발급 실패: %s", payload)
+        current_app.logger.error("[CALLBACK] token issue failed: %s", payload)
         return f"토큰 발급 실패: {payload.get('error', payload)}", 400
 
     info = payload["data"]
     access_token  = info.get("accessToken")
     refresh_token = info.get("refreshToken")
 
-    # 6) 세션에 토큰 저장
+    # 5) 세션 저장 직전/직후 확인
+    current_app.logger.debug("[CALLBACK] tokens received: at? %s / rt? %s",
+                             bool(access_token), bool(refresh_token))
+
     session["access_token"]  = access_token
     session["refresh_token"] = refresh_token
     session.permanent = True
-    current_app.logger.debug("토큰 발급 성공: access_token 및 refresh_token 저장 완료")
 
-    # 7) .env 파일에 새로운 tokens 영구 저장
+    current_app.logger.debug("[CALLBACK] session keys after set: %s", list(session.keys()))
+
+    # 6) .env 저장 (예외는 치명 아님)
     try:
         from dotenv import set_key, find_dotenv
         dotenv_path = find_dotenv()
-        # refresh token
-        set_key(dotenv_path, "IMWEB_REFRESH_TOKEN", refresh_token)
-        current_app.logger.info(".env에 새 IMWEB_REFRESH_TOKEN 저장 완료")
-        # access token
-        set_key(dotenv_path, "IMWEB_ACCESS_TOKEN", access_token)
-        current_app.logger.info(".env에 새 IMWEB_ACCESS_TOKEN 저장 완료")
+        set_key(dotenv_path, "IMWEB_REFRESH_TOKEN", refresh_token or "")
+        set_key(dotenv_path, "IMWEB_ACCESS_TOKEN", access_token or "")
+        current_app.logger.info("[CALLBACK] tokens persisted to .env")
     except Exception:
-        current_app.logger.exception(".env 파일에 토큰 저장 중 예외 발생")
+        current_app.logger.exception("[CALLBACK] .env write failed (non-fatal)")
 
-    # 8) 로그인 완료 후 인덱스로 리다이렉트
     return redirect(url_for("auth.index"))
 
 
