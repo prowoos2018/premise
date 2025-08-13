@@ -85,6 +85,24 @@ def _safe_get(d: dict, path: list[str], default=None):
         return cur if cur is not None else default
     except Exception:
         return default
+def _format_010_hyphen(phone_raw: str) -> str:
+    """
+    입력: 아무 형식(하이픈 포함/미포함) 전화번호
+    출력: 010-XXXX-XXXX (시트에 텍스트로 저장되도록 앞에 ' 붙임)
+    - 010으로 시작하고 총 11자리면 3-4-4로 포맷
+    - 그 외는 원본 유지
+    """
+    digits = "".join(ch for ch in (phone_raw or "") if ch.isdigit())
+    if digits.startswith("010") and len(digits) == 11:
+        mid = digits[3:7]
+        last = digits[7:]
+        # 앞에 '를 붙여 시트가 숫자로 인식해 0을 날리는 걸 방지 (텍스트로 저장)
+        return f"'010-{mid}-{last}"
+    # 010인데 10자리로 들어오는 등 애매하면 앞에 '만 붙여 0이 날아가는 걸 방지
+    if digits.startswith("010") and len(digits) >= 10:
+        return f"'{phone_raw if '-' in (phone_raw or '') else digits}"
+    return phone_raw or ""
+
 
 def _do_sync(token: str):
     """IMWEB 주문 → 구글시트 동기화 → 알림톡 발송."""
@@ -179,6 +197,7 @@ def _do_sync(token: str):
             orderer_name = o.get("ordererName", "") or ""
             orderer_email = o.get("ordererEmail", "") or ""
             orderer_call = o.get("ordererCall", "") or ""
+            formatted_phone_for_sheet = _format_010_hyphen(orderer_call)
             total_price = o.get("totalPrice", "")
 
             start_date = end_date = ""
@@ -208,7 +227,7 @@ def _do_sync(token: str):
                 prod_name,                   # F
                 orderer_name,                # G
                 orderer_email,               # H
-                orderer_call,                # I
+                formatted_phone_for_sheet,   # I
                 str(total_price),            # J
                 start_date,                  # K
                 end_date,                    # L
