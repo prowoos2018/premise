@@ -45,4 +45,6 @@ class Config:
     ALIGO_SENDERKEY = os.getenv("ALIGO_SENDERKEY", "")
     ALIGO_TPL_CODE  = os.getenv("ALIGO_TPL_CODE", "")
     ALIGO_SENDER    = os.getenv("ALIGO_SENDER", "")
-    ALIGO_BUTTON_NAME = os.getenv("ALIGO_BUTTON_NAME", "신청서작성")
+    ALIGO_BUTTON_NAME = os.getenv("ALIGO_BUTTON_NAME", "신청서 작성")
+    ALIGO_SUBJECT     = os.getenv("ALIGO_SUBJECT", "")
+    ALIGO_EMTITLE     = os.getenv("ALIGO_EMTITLE", "")
