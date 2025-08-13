@@ -13,7 +13,48 @@ from services.sheet_service import SheetService
 from services.directsend_service import DirectSendService
 from services.imweb_service import get_imweb_token
 # 파일 상단 import에 추가
+import time, random, traceback
 from googleapiclient.errors import HttpError
+
+RETRY_STATUS = {429, 500, 502, 503, 504}
+
+def _exec_with_retry(request, label: str, max_attempts: int = 6, base_sleep: float = 0.7):
+    """
+    Google Sheets API request.execute() 재시도 래퍼.
+    429/5xx에서 지수 백오프로 재시도. 각 시도마다 상세 로그 남김.
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            # discovery는 execute(num_retries=...)도 지원하지만,
+            # 우리가 커스텀 백오프/로그를 원해 직접 감싼다.
+            resp = request.execute()
+            if attempt > 1:
+                current_app.logger.warning("[%s] 성공 (attempt=%d)", label, attempt)
+            return resp
+        except HttpError as e:
+            status = getattr(e.resp, "status", None)
+            body = ""
+            try:
+                body = e.content.decode("utf-8", errors="ignore")
+            except Exception:
+                body = str(e)
+            current_app.logger.error("[%s] HttpError attempt=%d status=%s body=%s",
+                                     label, attempt, status, body[:600])
+
+            if status in RETRY_STATUS and attempt < max_attempts:
+                sleep = base_sleep * (2 ** (attempt - 1)) + random.uniform(0, 0.4)
+                time.sleep(sleep)
+                continue
+            raise
+        except Exception as e:
+            current_app.logger.exception("[%s] Exception attempt=%d", label, attempt)
+            if attempt < max_attempts:
+                sleep = base_sleep * (2 ** (attempt - 1)) + random.uniform(0, 0.4)
+                time.sleep(sleep)
+                continue
+            raise
 
 orders_bp = Blueprint("orders", __name__)
 
@@ -59,11 +100,12 @@ def _do_sync(token: str):
     # ========= 1) 이미 업데이트한 주문번호 수집 (주문번호 시트) =========
     try:
         sheet_svc = SheetService()
-        sheet_id = _require_config("SHEET_ID")  # 혹시 빠졌으면 여기서 명확히 터지게
-        resp = sheet_svc.sheet.values().get(
+        sheet_id = _require_config("SHEET_ID")  # 안전하게 한 번 더 보장
+        req = sheet_svc.sheet.values().get(
             spreadsheetId=sheet_id,
             range="주문번호!A2:A"
-        ).execute()
+        )
+        resp = _exec_with_retry(req, "주문번호 읽기")
         existing_order_no_set = {
             (row[0] or "").strip()
             for row in resp.get("values", [])
@@ -71,22 +113,20 @@ def _do_sync(token: str):
         }
         current_app.logger.debug("기존 주문번호 %d건 로드", len(existing_order_no_set))
     except HttpError as e:
-        # 구글 API 에러 본문/상태를 그대로 노출 (원인 파악 쉬움)
         status = getattr(e.resp, "status", "unknown")
         body = ""
         try:
             body = e.content.decode("utf-8", errors="ignore")
         except Exception:
             body = str(e)
-        current_app.logger.exception("주문번호 읽기 중 Google API 오류 (HTTP %s): %s", status, body[:800])
         return _html_error(
             "주문번호 시트 읽기 실패 (Google API)",
             500,
             f"HTTP {status}\n{body}"
         )
     except Exception as e:
-        current_app.logger.exception("주문번호 읽기 중 일반 오류")
         return _html_error("주문번호 시트 읽기 실패 (일반)", 500, repr(e))
+
 
     # ========= 2) IMWEB 주문 가져오기 =========
     try:
@@ -181,13 +221,15 @@ def _do_sync(token: str):
     # ========= 4) 통합시트 쓰기 & 주문번호 추가 =========
     try:
         if new_rows:
-            # 빈 자리부터 채우기
-            resp = sheet_svc.sheet.values().get(
+            # 통합시트 값 읽기 (빈 자리 탐색) — 재시도 적용
+            req = sheet_svc.sheet.values().get(
                 spreadsheetId=sheet_id,
                 range="통합시트!A2:L"
-            ).execute()
+            )
+            resp = _exec_with_retry(req, "통합시트 읽기")
             existing = resp.get("values", [])
 
+            # 첫 번째 빈 D열 위치 찾기
             start_row = None
             for idx, row in enumerate(existing, start=2):
                 if len(row) <= 3 or not (row[3] or "").strip():
@@ -195,31 +237,36 @@ def _do_sync(token: str):
                     break
             if start_row is None:
                 start_row = 2 + len(existing)
+
             end_row = start_row + len(new_rows) - 1
             write_range = f"통합시트!A{start_row}:O{end_row}"
 
-            sheet_svc.sheet.values().update(
+            # 값 업데이트 — 재시도 적용
+            req = sheet_svc.sheet.values().update(
                 spreadsheetId=sheet_id,
                 range=write_range,
                 valueInputOption="USER_ENTERED",
                 body={"values": new_rows}
-            ).execute()
+            )
+            _ = _exec_with_retry(req, "통합시트 쓰기")
             current_app.logger.info("통합시트에 %d건 동기화 (%s)", len(new_rows), write_range)
 
-            # 주문번호 시트 Append
+            # 주문번호 시트 Append — 재시도 적용
             values_to_append = [[no] for no in new_order_nos]
-            sheet_svc.sheet.values().append(
+            req = sheet_svc.sheet.values().append(
                 spreadsheetId=sheet_id,
                 range="주문번호!A:A",
                 valueInputOption="USER_ENTERED",
                 body={"values": values_to_append}
-            ).execute()
+            )
+            _ = _exec_with_retry(req, "주문번호 Append")
             current_app.logger.info("주문번호에 %d건 추가", len(values_to_append))
         else:
             current_app.logger.info("신규 주문 없음 (중복 혹은 상태 미충족)")
     except Exception as e:
         current_app.logger.exception("시트 쓰기 중 오류")
         return _html_error("시트 쓰기 실패", 500, str(e))
+
 
     # ========= 5) 자동 알림톡 발송 =========
     try:
