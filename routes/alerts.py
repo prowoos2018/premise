@@ -10,7 +10,7 @@ alerts_bp = Blueprint("alerts", __name__)
 @alerts_bp.route("/send-invite")
 def send_invite():
     sheet_svc = SheetService()
-    ds_svc    = DirectSendService()
+    ds_svc    = AligoService()
 
     # 1) 시트 전체 읽기
     rows = sheet_svc.fetch_all(tab="통합시트")
@@ -51,13 +51,12 @@ def send_invite():
         phone = "".join(filter(str.isdigit, row[8] if len(row) > 8 else ""))
 
         current_app.logger.info(f"{idx}행 발송 시도 → 주문번호={order_no}, phone={phone}")
-        resp = ds_svc.send_message({ "mobile": phone, "note1": link })
+        resp = aligo.send_message({ "mobile": phone, "note1": link })
         current_app.logger.info(f"{idx}행 발송 응답: {resp}")
 
         if resp.get("status") == "1":
             sent_count += 1
             updates.append({"row": idx, "value": "o"})
-            # 방금 발송한 주문번호도 집합에 추가 (동일번호 또 skip)
             sent_order_nos.add(order_no)
         else:
             current_app.logger.error(f"{idx}행 발송 실패: {resp}")
@@ -81,7 +80,6 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # .env 에서 설정
 
 @alerts_bp.route("/webhook-invite", methods=["POST"])
 def webhook_invite():
-    # 1) 간단 인증
     if request.args.get("key") != WEBHOOK_SECRET:
         return "Unauthorized", 401
 
@@ -90,14 +88,11 @@ def webhook_invite():
     phone = data.get("phone")
     link  = data.get("link")
 
-    # 2) 알림톡 발송
-    ds_svc = DirectSendService()
-    res = ds_svc.send_messages([{
-        "mobile": phone,
-        "note1":  link   # 템플릿 변수명에 맞춰 조정
-    }])
+    aligo = AligoService()
+    res = aligo.send_messages([
+        {"mobile": phone, "note1": link}
+    ])
 
-    # 3) 성공 시 시트에 'o' 찍기
     if all(r.get("status") == "1" for r in res):
         SheetService().batch_update([{"row": row, "value": "o"}])
 

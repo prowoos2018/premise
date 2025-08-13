@@ -10,11 +10,14 @@ from dateutil.relativedelta import relativedelta
 from config import Config
 from routes.utils import login_required
 from services.sheet_service import SheetService
-from services.directsend_service import DirectSendService
 from services.imweb_service import get_imweb_token
 # 파일 상단 import에 추가
-import time, random, traceback
+import time, random
 from googleapiclient.errors import HttpError
+from services.aligo_service import AligoService
+
+aligo = AligoService()
+
 
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
@@ -226,7 +229,7 @@ def _do_sync(token: str):
                 spreadsheetId=sheet_id,
                 range="통합시트!A2:L"
             )
-            resp = _exec_with_retry(req, "통합시트 읽기")
+            resp = _exec_with_retry(req, "통합시트 읽기", max_attempts=8, base_sleep=0.8)
             existing = resp.get("values", [])
 
             # 첫 번째 빈 D열 위치 찾기
@@ -271,7 +274,6 @@ def _do_sync(token: str):
     # ========= 5) 자동 알림톡 발송 =========
     try:
         all_rows = sheet_svc.fetch_all(tab="통합시트")
-        ds_svc = DirectSendService()
 
         sent_order_nos = {
             (r[3] if len(r) > 3 else "").strip()
@@ -299,9 +301,9 @@ def _do_sync(token: str):
                 continue
 
             current_app.logger.info("%d행 주문번호=%s 발송 시도 → %s", idx, order_no, phone)
-            result = ds_svc.send_messages([{"mobile": phone, "note1": link}])[0]
+            result = aligo.send_messages([{"mobile": phone, "note1": link}])[0]
             current_app.logger.info("%d행 응답: %s", idx, result)
-            current_app.logger.info("%d행 템플릿 번호: %s", idx, Config.DS_TEMPLATE_NO)
+            current_app.logger.info("%d행 알리고 템플릿 코드: %s", idx, Config.ALIGO_TPL_CODE)
 
             if str(result.get("status")) == "1":
                 sent_cnt += 1
