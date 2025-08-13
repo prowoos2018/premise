@@ -5,6 +5,7 @@ from config import Config
 # 템플릿 치환: #{LINK} 변수를 실제 링크로 바꾼다고 가정
 # 승인된 템플릿 본문을 그대로 적고, 변수 위치는 {LINK} 로 포맷팅되게 둡니다.
 # 예: "안녕하세요.\n이용 링크: {LINK}\n감사합니다."
+TEMPLATE_SUBJECT = "프리미즈 개인유튜브 발송알림톡" 
 TEMPLATE_MESSAGE = (
     "프리미즈입니다.\n"
     "주문해 주셔서 감사합니다.\n"
