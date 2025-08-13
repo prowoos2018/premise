@@ -1,9 +1,0 @@
-[Unit]
-Description=Sync Imweb Orders via internal endpoint
-After=network.target
-
-[Service]
-Type=oneshot
-User=prewoos2018
-# HTTP 포트가 5000이라면 localhost:5000, 실제 포트에 맞게 변경하세요
-ExecStart=/usr/bin/curl -s "http://localhost:5000/internal/orders-sync?sync_token=d2c0c892-68c3-4726-8553-ebba2c2ae928"
