@@ -28,10 +28,8 @@ def _post_with_retry(data: dict, label: str, max_attempts: int = 5):
                 continue
             raise
 
-def _build_button_json(link_url: str) -> str:
-    """
-    WL(웹링크) 버튼 1개. 알리고 스펙: linkMo / linkPc
-    """
+def _build_button_json_from_url(link_url: str) -> str:
+    """WL 버튼 1개를 URL로부터 생성 (문자열 JSON 반환)."""
     if not link_url:
         return ""
     button = {
@@ -45,7 +43,7 @@ def _build_button_json(link_url: str) -> str:
     }
     return json.dumps(button, ensure_ascii=False)
 
-def send_one(to: str, subject: str, message: str, link_url: str = "") -> dict:
+def send_one(to: str, subject: str, message: str, link_url: str = "", button_json: str = "") -> dict:
     data = {
         "apikey":     Config.ALIGO_API_KEY,
         "userid":     Config.ALIGO_USER_ID,
@@ -53,16 +51,16 @@ def send_one(to: str, subject: str, message: str, link_url: str = "") -> dict:
         "tpl_code":   Config.ALIGO_TPL_CODE,
         "sender":     Config.ALIGO_SENDER,
         "receiver_1": to,
-        "subject_1":  subject or "",             # 템플릿과 동일 권장
-        "message_1":  message,                   # 본문 100% 동일
+        "subject_1":  subject or "",
+        "message_1":  message,
     }
-    # 강조표기형 템플릿이면 필수
     if Config.ALIGO_EMTITLE:
         data["emtitle_1"] = Config.ALIGO_EMTITLE
 
-    btn = _build_button_json(link_url)
+    # 버튼: button_json 우선, 없으면 link_url로 생성
+    btn = button_json or _build_button_json_from_url(link_url)
     if btn:
-        data["button_1"] = btn  # 문자열(JSON)이어야 함
+        data["button_1"] = btn  # 반드시 문자열 JSON
 
     current_app.logger.debug("[ALIGO] payload(keys)=%s", list(data.keys()))
     resp = _post_with_retry(data, "alimtalk/send")
@@ -80,11 +78,17 @@ def send_batch(items: List[Dict]) -> List[dict]:
             to=it.get("to",""),
             subject=it.get("subject",""),
             message=it.get("message",""),
+            button_json=it.get("button_json",""),
             link_url=it.get("link",""),
         )
         results.append(r)
     return results
 
 def is_success(result: dict) -> bool:
+    """
+    알리고 응답:
+      - code=0 : 전송요청 수락(정상)  ← 이 단계도 성공 처리
+      - code=1 : 에러
+    """
     code = str(result.get("result_code") or result.get("code") or result.get("result") or "")
-    return code == "1"
+    return code in {"0", "1"} and result.get("message") == "성공적으로 전송요청 하였습니다." or code == "1"
