@@ -88,11 +88,10 @@ def send_batch(items: List[Dict]) -> List[dict]:
         results.append(r)
     return results
 
-# infra/aligo_client.py
 def is_success(result: dict) -> bool:
+    # 알리고 응답: code == 0 이면 "성공적으로 전송요청 하였습니다." = 정상 접수
     code = str(result.get("result_code") or result.get("code") or result.get("result") or "")
     msg  = str(result.get("message") or "")
-    # 알리고: code==0 이면 "성공적으로 전송요청" = 정상 접수(성공)
-    return code == "0" and "성공적으로 전송요청" in msg
+    return (code == "0") and ("성공적으로 전송요청" in msg)
 
 
