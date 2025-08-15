@@ -89,7 +89,8 @@ def send_batch(items: List[Dict]) -> List[dict]:
     return results
 
 def is_success(result: dict) -> bool:
-    # 알리고: code=0 → 전송요청 수락(정상)
+    # code=0: 전송요청 수락(정상), code<0: 요청 오류, 그 외는 케이스별
     code = str(result.get("result_code") or result.get("code") or result.get("result") or "")
     msg  = str(result.get("message") or "")
-    return (code == "0" and "성공적으로 전송요청" in msg)
+    return code == "0" and "성공적으로 전송요청" in msg
+
