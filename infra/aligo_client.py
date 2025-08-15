@@ -55,20 +55,19 @@ def send_one(to: str, subject: str, message: str, link_url: str = "", button_jso
         "message_1":  message,
     }
     if Config.ALIGO_EMTITLE:
-        data["emtitle_1"] = Config.ALIGO_EMTITLE
+        data["emtitle_1"] = Config.ALIGO_EMTITLE  # 강조표기형일 때만
 
-    # 버튼: button_json 우선, 없으면 link_url로 생성
-    btn = button_json or _build_button_json_from_url(link_url)
-    if btn:
-        data["button_1"] = btn  # 반드시 문자열 JSON
+    # 버튼: 문자열 JSON 우선 사용
+    if button_json:
+        data["button_1"] = button_json
+    elif link_url:
+        data["button_1"] = _build_button_json_from_url(link_url)  # 이 함수는 문자열 반환
 
-    current_app.logger.debug("[ALIGO] payload(keys)=%s", list(data.keys()))
     resp = _post_with_retry(data, "alimtalk/send")
     try:
         result = resp.json()
     except Exception:
         result = {"http_status": resp.status_code, "text": resp.text}
-    current_app.logger.debug("[ALIGO] result=%s", result)
     return result
 
 def send_batch(items: List[Dict]) -> List[dict]:
@@ -85,10 +84,7 @@ def send_batch(items: List[Dict]) -> List[dict]:
     return results
 
 def is_success(result: dict) -> bool:
-    """
-    알리고 응답:
-      - code=0 : 전송요청 수락(정상)  ← 이 단계도 성공 처리
-      - code=1 : 에러
-    """
+    # 알리고: code=0 → 전송요청 수락(정상), code=1 → 오류
     code = str(result.get("result_code") or result.get("code") or result.get("result") or "")
-    return code in {"0", "1"} and result.get("message") == "성공적으로 전송요청 하였습니다." or code == "1"
+    msg  = str(result.get("message") or "")
+    return (code == "0" and "성공적으로 전송요청" in msg)  # 요청 수락을 성공 처리
