@@ -1,29 +1,19 @@
 [Unit]
 Description=Sync Imweb Orders via internal endpoint
 Wants=network-online.target
-After=network-online.target
+After=network-online.target premise.service   # ← 웹앱 유닛명이 premise면 추가
 
 [Service]
 Type=oneshot
-# 작업 실행 유저 (웹앱/로그 권한에 맞게 조정)
 User=prewoos2018
-# 환경변수 파일(선택): /etc/default/orders-sync 에 SYNC_TOKEN, URL 등 넣어두면 편함
 EnvironmentFile=-/etc/default/orders-sync
-# 직접 Environment로도 가능 (EnvironmentFile 안 쓴다면 아래 두 줄을 채워도 됨)
-# Environment="SYNC_TOKEN=d2c0c892-68c3-4726-8553-ebba2c2ae928"
-# Environment="SYNC_URL=http://localhost:5000/internal/orders-sync"
-
-# 네트워크 불안/일시 에러 대비: curl에 타임아웃, 실패 시 재시도 옵션 사용
-# --fail-with-body: 4xx/5xx를 실패로 처리
-# --retry 3 --retry-delay 2 --retry-connrefused: 연결/서버 에러 재시도
-# --max-time 20: 전체 타임아웃 20초
-ExecStart=/usr/bin/bash -lc '/usr/bin/curl \
+# ↓ bash -lc 제거, curl 직접 실행
+ExecStart=/usr/bin/curl \
   --silent --show-error --fail-with-body \
   --retry 3 --retry-delay 2 --retry-connrefused \
   --max-time 20 \
-  "${SYNC_URL:-http://localhost:5000/internal/orders-sync}?sync_token=${SYNC_TOKEN:-d2c0c892-68c3-4726-8553-ebba2c2ae928}"'
+  "${SYNC_URL:-http://127.0.0.1:5000/internal/orders-sync}?sync_token=${SYNC_TOKEN:-d2c0c892-68c3-4726-8553-ebba2c2ae928}"
 
-# 보안/안정성(선택): 네트워크만 열어둔 최소 권한 실행
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
