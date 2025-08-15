@@ -40,13 +40,15 @@ class AligoService:
     def send_message(self, payload: dict) -> dict:
         to  = payload.get("mobile") or payload.get("to")
         msg = TEMPLATE_MESSAGE
-        res = send_one(
-            to=to,
-            subject=TEMPLATE_SUBJECT,
-            message=msg,
-            button_json=BUTTON_JSON,   # 문자열 JSON
-        )
-        return {"status": "1" if is_success(res) else "0", "raw": res}
+        res = send_one(to=to, subject=TEMPLATE_SUBJECT, message=msg, button_json=BUTTON_JSON)
+
+        accepted = is_success(res)
+        return {
+            "status": "1" if accepted else "0",
+            "stage":  "accepted" if accepted else "error",   # ← 단계 표시
+            "note":   "콜백으로 최종 결과가 확정됩니다." if accepted else "",
+            "raw":    res,
+        }
 
     def send_messages(self, items: list[dict]) -> list[dict]:
         batch = []
