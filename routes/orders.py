@@ -150,12 +150,24 @@ def _do_sync(token: str):
 
 
     # ========= 2) IMWEB 주문 가져오기 =========
-    try:
+    def _fetch_imweb_orders(token: str, site_code: str):
         url = "https://openapi.imweb.me/orders"
         params = {"siteCode": site_code, "page": 1, "limit": 100}
         headers = {"Authorization": f"Bearer {token}"}
         current_app.logger.debug("ORDERS REQUEST url=%s params=%s", url, params)
         resp = requests.get(url, params=params, headers=headers, timeout=15)
+        return resp
+
+    try:
+        # 1차 시도
+        resp = _fetch_imweb_orders(token, site_code)
+
+        # 401이면 access_token 만료/무효 가능성 → 토큰 재발급 후 1회 재시도
+        if resp.status_code == 401:
+            current_app.logger.warning("IMWEB 주문 조회 401 → access_token 재발급 후 재시도")
+            token = get_imweb_token()  # 새 토큰 강제 발급
+            resp = _fetch_imweb_orders(token, site_code)
+
         current_app.logger.debug("ORDERS RESPONSE %s %s", resp.status_code, resp.text[:800])
         resp.raise_for_status()
         data = resp.json()
@@ -163,8 +175,13 @@ def _do_sync(token: str):
             msg = f"IMWEB 주문 조회 실패: {data}"
             current_app.logger.error(msg)
             return _html_error("IMWEB 주문 조회 실패", 400, json.dumps(data, ensure_ascii=False))
+
         orders = _safe_get(data, ["data", "list"], []) or []
         current_app.logger.info("IMWEB 주문 %d건 수신", len(orders))
+
+    except requests.HTTPError as e:
+        current_app.logger.exception("주문 조회 중 HTTPError")
+        return _html_error("IMWEB 주문 조회 중 예외", 500, f"{e}")
     except Exception as e:
         current_app.logger.exception("주문 조회 중 오류")
         return _html_error("IMWEB 주문 조회 중 예외", 500, str(e))

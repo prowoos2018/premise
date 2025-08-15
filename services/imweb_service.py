@@ -95,13 +95,20 @@ def get_imweb_token():
         logger.exception("[IMWEB] 토큰 재발급 요청 실패")
         raise
 
-    # 6) 응답 데이터 파싱
     info       = payload.get("data", {})
     new_at     = info.get("accessToken")
     new_rt     = info.get("refreshToken", refresh_token)
     expires_in = info.get("expiresIn", info.get("expires_in", 3600))
+    try:
+        expires_in = int(expires_in)
+    except Exception:
+        expires_in = 3600
 
-    # 7) .env 파일에 access_token과 refresh_token 항상 덮어쓰기
+    if not new_at:
+        logger.error("[IMWEB] accessToken 누락: %s", payload)
+        raise RuntimeError("IMWEB accessToken not returned")
+
+    # 7) .env 저장 (실패해도 캐시는 갱신)
     try:
         set_key(dotenv_path, "IMWEB_ACCESS_TOKEN",  new_at)
         set_key(dotenv_path, "IMWEB_REFRESH_TOKEN", new_rt)
@@ -109,12 +116,10 @@ def get_imweb_token():
     except Exception:
         logger.exception("[IMWEB] .env 파일에 토큰 저장 실패")
 
-    # 8) 캐시 업데이트
     token_cache.update({
         "access_token":  new_at,
         "refresh_token": new_rt,
         "expires_at":    now + expires_in,
     })
     logger.info("[IMWEB] 토큰 갱신 성공 - expires in %d초", expires_in)
-
     return new_at
