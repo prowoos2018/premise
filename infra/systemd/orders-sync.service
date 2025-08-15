@@ -1,19 +1,12 @@
 [Unit]
 Description=Sync Imweb Orders via internal endpoint
 Wants=network-online.target
-After=network-online.target premise.service   # ← 웹앱 유닛명이 premise면 추가
+After=network-online.target premise.service
 
 [Service]
 Type=oneshot
 User=prewoos2018
-EnvironmentFile=-/etc/default/orders-sync
-# ↓ bash -lc 제거, curl 직접 실행
-ExecStart=/usr/bin/curl \
-  --silent --show-error --fail-with-body \
-  --retry 3 --retry-delay 2 --retry-connrefused \
-  --max-time 20 \
-  "${SYNC_URL:-http://127.0.0.1:5000/internal/orders-sync}?sync_token=${SYNC_TOKEN:-d2c0c892-68c3-4726-8553-ebba2c2ae928}"
-
+ExecStart=/usr/bin/curl --silent --show-error --fail-with-body --max-time 20 "http://127.0.0.1:5000/internal/orders-sync?sync_token=d2c0c892-68c3-4726-8553-ebba2c2ae928"
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
