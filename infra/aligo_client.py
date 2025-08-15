@@ -89,9 +89,29 @@ def send_batch(items: List[Dict]) -> List[dict]:
     return results
 
 def is_success(result: dict) -> bool:
-    # 알리고 응답: code == 0 이면 "성공적으로 전송요청 하였습니다." = 정상 접수
-    code = str(result.get("result_code") or result.get("code") or result.get("result") or "")
-    msg  = str(result.get("message") or "")
-    return (code == "0") and ("성공적으로 전송요청" in msg)
+    # code 값 안전하게 추출 (0도 유효해야 함)
+    code_val = result.get("result_code")
+    if code_val is None:
+        code_val = result.get("code")
+    if code_val is None:
+        code_val = result.get("result")
+
+    try:
+        code_int = int(code_val)
+    except Exception:
+        code_int = 1  # 알 수 없으면 실패 취급
+
+    msg = str(result.get("message") or "").strip()
+
+    # 🔹 디버그 로그 추가 — 여기서 찍으면 됨
+    current_app.logger.debug(
+        "[ALIGO is_success] raw_code=%r, parsed=%s, msg=%r",
+        code_val, code_int, msg
+    )
+
+    # 알리고: code == 0 이면 "성공적으로 전송요청 하였습니다." = 정상 접수
+    return (code_int == 0) and ("성공적으로 전송요청" in msg)
+
+
 
 
