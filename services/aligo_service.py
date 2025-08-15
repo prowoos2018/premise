@@ -25,7 +25,7 @@ TEMPLATE_MESSAGE = (
 
 TEMPLATE_SUBJECT = Config.ALIGO_SUBJECT or "프리미즈 개인유튜브 발송알림톡"
 
-# 승인된 버튼 JSON (문자열)
+# 승인된 버튼 JSON (문자열) — URL 끝 슬래시 없음
 BUTTON_JSON = (
     '{"button":[{'
     '"name":"신청서 작성",'
@@ -38,27 +38,26 @@ BUTTON_JSON = (
 
 class AligoService:
     def send_message(self, payload: dict) -> dict:
-        to = payload.get("mobile") or payload.get("to")
+        to  = payload.get("mobile") or payload.get("to")
         msg = TEMPLATE_MESSAGE
         res = send_one(
             to=to,
             subject=TEMPLATE_SUBJECT,
             message=msg,
-            button_json=BUTTON_JSON,   # ← 문자열 JSON으로 전달
+            button_json=BUTTON_JSON,   # 문자열 JSON
         )
         return {"status": "1" if is_success(res) else "0", "raw": res}
 
     def send_messages(self, items: list[dict]) -> list[dict]:
         batch = []
         for it in items:
-            to = it.get("mobile") or it.get("to")
+            to  = it.get("mobile") or it.get("to")
             msg = TEMPLATE_MESSAGE
             batch.append({
                 "to": to,
                 "subject": TEMPLATE_SUBJECT,
                 "message": msg,
-                "button_json": BUTTON_JSON,  # ← 여기도 동일
+                "button_json": BUTTON_JSON,
             })
         res_list = send_batch(batch)
         return [{"status": "1" if is_success(r) else "0", "raw": r} for r in res_list]
-
