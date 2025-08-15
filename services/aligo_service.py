@@ -2,7 +2,7 @@
 from infra.aligo_client import send_one, send_batch, is_success
 from config import Config
 
-# 승인된 본문을 "그대로" 넣으세요. (아래는 예시 — 콘솔 승인본을 그대로 복붙!)
+# 승인된 본문 (문자/개행/특수문자 동일)
 TEMPLATE_MESSAGE = (
     "프리미즈입니다.\n"
     "주문해 주셔서 감사합니다.\n"
@@ -25,20 +25,36 @@ TEMPLATE_MESSAGE = (
 
 TEMPLATE_SUBJECT = Config.ALIGO_SUBJECT or "프리미즈 개인유튜브 발송알림톡"
 
+# 승인된 버튼 JSON
+BUTTON_1 = (
+    '{"name":"신청서 작성",'
+    '"type":"WL",'
+    '"url_mobile":"https://forms.gle/5Jhy6uZ78KJiM4tX8",'
+    '"url_pc":"https://forms.gle/5Jhy6uZ78KJiM4tX8"}'
+)
+
 class AligoService:
     def send_message(self, payload: dict) -> dict:
-        to   = payload.get("mobile") or payload.get("to")
-        link = payload.get("note1")  or payload.get("link") or ""  # 버튼 링크로만 사용
-        msg  = TEMPLATE_MESSAGE
-        res  = send_one(to=to, subject=TEMPLATE_SUBJECT, message=msg, link_url=link)
+        to = payload.get("mobile") or payload.get("to")
+        msg = TEMPLATE_MESSAGE
+        res = send_one(
+            to=to,
+            subject=TEMPLATE_SUBJECT,
+            message=msg,
+            button_1=BUTTON_1  # 버튼 추가
+        )
         return {"status": "1" if is_success(res) else "0", "raw": res}
 
     def send_messages(self, items: list[dict]) -> list[dict]:
         batch = []
         for it in items:
-            to   = it.get("mobile") or it.get("to")
-            link = it.get("note1")  or it.get("link") or ""
-            msg  = TEMPLATE_MESSAGE
-            batch.append({"to": to, "subject": TEMPLATE_SUBJECT, "message": msg, "link": link})
+            to = it.get("mobile") or it.get("to")
+            msg = TEMPLATE_MESSAGE
+            batch.append({
+                "to": to,
+                "subject": TEMPLATE_SUBJECT,
+                "message": msg,
+                "button_1": BUTTON_1  # 버튼 추가
+            })
         res_list = send_batch(batch)
         return [{"status": "1" if is_success(r) else "0", "raw": r} for r in res_list]
