@@ -9,3 +9,4 @@ lexical-period-458507-k9-*.json
 *.service-account.json
 *.key.json
 # 필요시 특정 파일은 예외로 빼세요: !package.json
+credentials.json
