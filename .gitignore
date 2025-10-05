@@ -3,3 +3,9 @@
 __pycache__/
 *.log   
 lexical-period-458507-k9-*.json
+/secrets/
+/bak/
+/*.token.json
+*.service-account.json
+*.key.json
+# 필요시 특정 파일은 예외로 빼세요: !package.json
